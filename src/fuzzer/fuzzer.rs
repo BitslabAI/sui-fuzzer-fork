@@ -173,7 +173,7 @@ impl Fuzzer {
         path.extend([test_dir]);
         let with_unpublished_deps = false;
         let config = BuildConfig::new_for_testing();
-        let package = config.build(path).unwrap();
+        let package = config.build(&path).unwrap();
         (
             package.get_package_digest(with_unpublished_deps).to_vec(),
             package.get_package_bytes(with_unpublished_deps),

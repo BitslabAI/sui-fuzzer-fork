@@ -1,13 +1,12 @@
 use move_binary_format::errors::VMError;
 use move_binary_format::errors::VMResult;
+use move_binary_format::file_format_common::VERSION_MAX;
 use move_binary_format::CompiledModule;
 use move_core_types::account_address::AccountAddress;
 use move_core_types::identifier::IdentStr;
 use move_core_types::language_storage::ModuleId;
-use move_core_types::language_storage::StructTag;
 use move_core_types::resolver::LinkageResolver;
 use move_core_types::resolver::ModuleResolver;
-use move_core_types::resolver::ResourceResolver;
 use move_core_types::runtime_value::serialize_values;
 use move_core_types::runtime_value::MoveValue;
 use move_core_types::vm_status::StatusCode;
@@ -40,7 +39,7 @@ impl RemoteStore {
     pub fn add_module(&mut self, compiled_module: CompiledModule) {
         let id = compiled_module.self_id();
         let mut bytes = vec![];
-        compiled_module.serialize(&mut bytes).unwrap();
+        compiled_module.serialize_with_version(VERSION_MAX, &mut bytes).unwrap();
         self.modules.insert(id, bytes);
     }
 }
@@ -53,18 +52,6 @@ impl ModuleResolver for RemoteStore {
     type Error = VMError;
     fn get_module(&self, module_id: &ModuleId) -> Result<Option<Vec<u8>>, Self::Error> {
         Ok(self.modules.get(module_id).cloned())
-    }
-}
-
-impl ResourceResolver for RemoteStore {
-    type Error = VMError;
-
-    fn get_resource(
-        &self,
-        _address: &AccountAddress,
-        _tag: &StructTag,
-    ) -> Result<Option<Vec<u8>>, Self::Error> {
-        Ok(None)
     }
 }
 
@@ -174,7 +161,7 @@ impl Runner for SuiRunner {
             ty_args,
             combine_signers_and_args(vec![], serialize_values(&generate_inputs(inputs.clone()))),
             &mut UnmeteredGasMeter,
-            &mut coverage,
+            None,
         );
 
         match result {

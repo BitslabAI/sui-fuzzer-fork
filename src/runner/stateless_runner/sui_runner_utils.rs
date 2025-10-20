@@ -1,8 +1,7 @@
+use itertools::Itertools;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-use itertools::Itertools;
-use move_binary_format::access::ModuleAccess;
 use move_binary_format::file_format::{FunctionDefinitionIndex, StructDefinitionIndex};
 use move_binary_format::CompiledModule;
 use move_core_types::account_address::AccountAddress;
@@ -15,13 +14,11 @@ use move_model::model::GlobalEnv;
 use move_model::model::Loc;
 use move_model::model::ModuleData;
 use move_model::model::ModuleId as ModelModuleId;
-use move_model::model::StructId;
+use move_model::model::DatatypeId;
 use move_model::symbol::SymbolPool;
 use move_model::ty::{PrimitiveType, Type};
 use move_bytecode_utils::Modules;
-use move_package::compilation::model_builder::ModelBuilder;
-use move_package::BuildConfig;
-use move_package::ModelConfig;
+use sui_move_build::BuildConfig as SuiBuildConfig;
 use crate::mutator::types::Type as FuzzerType;
 
 /// From https://github.com/kunalabs-io/sui-client-gen
@@ -50,9 +47,9 @@ pub fn add_modules_to_model<'a>(
         // add structs
         for (i, def) in m.struct_defs().iter().enumerate() {
             let def_idx = StructDefinitionIndex(i as u16);
-            let name = m.identifier_at(m.struct_handle_at(def.struct_handle).name);
+            let name = m.identifier_at(m.datatype_handle_at(def.struct_handle).name);
             let symbol = env.symbol_pool().make(name.as_str());
-            let struct_id = StructId::new(symbol);
+            let struct_id = DatatypeId::new(symbol);
             let data =
                 env.create_move_struct_data(m, def_idx, symbol, Loc::default(), Vec::default());
             module_data.struct_data.insert(struct_id, data);
@@ -73,9 +70,9 @@ impl From<FuzzerType> for Type {
             FuzzerType::U128(_) => Type::Primitive(PrimitiveType::U128),
             FuzzerType::Bool(_) => Type::Primitive(PrimitiveType::Bool),
             FuzzerType::Vector(t, _) => Type::Vector(Box::new(Type::from(*t))),
-            FuzzerType::Struct(types) => Type::Struct(
+            FuzzerType::Struct(types) => Type::Datatype(
                 ModelModuleId::new(42),
-                StructId::new(SymbolPool::new().make("")),
+                DatatypeId::new(SymbolPool::new().make("")),
                 types.into_iter().map(|t| Type::from(t)).collect_vec(),
             ),
             FuzzerType::Reference(b, t) => Type::Reference(b, Box::new(Type::from(*t))),
@@ -103,7 +100,7 @@ impl From<Type> for FuzzerType {
             },
             Type::Tuple(_) => todo!(),
             Type::Vector(vec) => FuzzerType::Vector(Box::new(FuzzerType::from(*vec)), vec![]),
-            Type::Struct(_, _, types) => {
+            Type::Datatype(_, _, types) => {
                 FuzzerType::Struct(types.into_iter().map(|t| FuzzerType::from(t)).collect_vec())
             }
             Type::TypeParameter(_) => todo!(),
@@ -122,46 +119,22 @@ pub fn generate_abi_from_source(
     module_name: &str,
     function_name: &str,
 ) -> (Vec<Type>, usize) {
-    let params;
-    let max_coverage;
-
-    let build_config = BuildConfig {
-        skip_fetch_latest_git_deps: true,
-        ..Default::default()
-    };
-
-    let resolv_graph = build_config
-        .resolution_graph_for_package(Path::new(&path), &mut std::io::stderr())
-        .unwrap();
-
-    let source_env = ModelBuilder::create(
-        resolv_graph,
-        ModelConfig {
-            all_files_as_targets: false,
-            target_filter: None,
-        },
-    )
-    .build_model()
-    .unwrap();
-
-    let module_env = source_env
-        .get_modules()
-        .find(|m| m.matches_name(module_name));
-
-    if let Some(env) = module_env {
-        let func = env
-            .get_functions()
-            .find(|f| f.get_name_str() == function_name);
-        if let Some(f) = func {
-            max_coverage = f.get_bytecode().len();
-            params = f.get_parameters().iter().map(|p| p.1.clone()).collect();
-        } else {
-            panic!("Could not find target function !");
-        }
-    } else {
-        panic!("Could not find target module {} !", module_name);
+    let path_obj = Path::new(path);
+    if path_obj.is_file() {
+        let module = load_compiled_module(path);
+        return generate_abi_from_modules(&[module], module_name, function_name);
     }
-    (params, max_coverage)
+
+    let compiled_package = SuiBuildConfig::new_for_testing()
+        .build(path_obj)
+        .expect("Failed to build Move package for ABI generation");
+
+    let modules: Vec<CompiledModule> = compiled_package
+        .get_modules_and_deps()
+        .map(|m| m.clone())
+        .collect();
+
+    generate_abi_from_modules(&modules, module_name, function_name)
 }
 
 pub fn generate_abi_from_bin(
@@ -169,33 +142,41 @@ pub fn generate_abi_from_bin(
     module_name: &str,
     function_name: &str,
 ) -> (Vec<Type>, usize) {
-    let params;
-    let max_coverage;
+    generate_abi_from_modules(&[module.clone()], module_name, function_name)
+}
 
-    let modules = [module.clone()];
+fn generate_abi_from_modules(
+    modules: &[CompiledModule],
+    module_name: &str,
+    function_name: &str,
+) -> (Vec<Type>, usize) {
+    let env = build_env_from_modules(modules);
+    let module_env = env
+        .get_modules()
+        .find(|m| m.matches_name(module_name))
+        .unwrap_or_else(|| panic!("Could not find target module {module_name} !"));
+
+    let func = module_env
+        .get_functions()
+        .find(|f| f.get_name_str() == function_name)
+        .unwrap_or_else(|| panic!("Could not find target function !"));
+
+    let max_coverage = func.get_bytecode().len();
+    let params = func.get_parameter_types();
+
+    (params, max_coverage)
+}
+
+fn build_env_from_modules(modules: &[CompiledModule]) -> GlobalEnv {
     let module_map = Modules::new(modules.iter());
-    let dep_graph = module_map.compute_dependency_graph();
-    let topo_order = dep_graph.compute_topological_order().unwrap();
+    let topo_order: Vec<&CompiledModule> = module_map
+        .compute_topological_order()
+        .expect("Failed to compute module order")
+        .collect();
 
     let mut env = GlobalEnv::new();
     add_modules_to_model(&mut env, topo_order);
-
-    let module_env = env.get_modules().find(|m| m.matches_name(module_name));
-
-    if let Some(env) = module_env {
-        let func = env
-            .get_functions()
-            .find(|f| f.get_name_str() == function_name);
-        if let Some(f) = func {
-            max_coverage = f.get_bytecode().len();
-            params = f.get_parameter_types();
-        } else {
-            panic!("Could not find target function !");
-        }
-    } else {
-        panic!("Could not find target module !");
-    }
-    (params, max_coverage)
+    env
 }
 
 pub fn generate_abi_from_source_starts_with(
@@ -203,27 +184,22 @@ pub fn generate_abi_from_source_starts_with(
     module_name: &str,
     function_name: &str,
 ) -> Vec<(String, Vec<Type>)> {
-
-    let build_config = BuildConfig {
-        skip_fetch_latest_git_deps: true,
-        ..Default::default()
+    let path_obj = Path::new(path);
+    let env = if path_obj.is_file() {
+        let module = load_compiled_module(path);
+        build_env_from_modules(&[module])
+    } else {
+        let compiled_package = SuiBuildConfig::new_for_testing()
+            .build(path_obj)
+            .expect("Failed to build Move package for ABI discovery");
+        let modules: Vec<CompiledModule> = compiled_package
+            .get_modules_and_deps()
+            .map(|m| m.clone())
+            .collect();
+        build_env_from_modules(&modules)
     };
 
-    let resolv_graph = build_config
-        .resolution_graph_for_package(Path::new(&path), &mut std::io::stderr())
-        .unwrap();
-
-    let source_env = ModelBuilder::create(
-        resolv_graph,
-        ModelConfig {
-            all_files_as_targets: false,
-            target_filter: None,
-        },
-    )
-    .build_model()
-    .unwrap();
-
-    let module_env = source_env
+    let module_env = env
         .get_modules()
         .find(|m| m.matches_name(module_name));
 
@@ -257,8 +233,7 @@ pub fn get_fuzz_functions_from_bin(path: &str, module_name: &str, prefix: &str) 
 
     let modules = [module.clone()];
     let module_map = Modules::new(modules.iter());
-    let dep_graph = module_map.compute_dependency_graph();
-    let topo_order = dep_graph.compute_topological_order().unwrap();
+    let topo_order = module_map.compute_topological_order().unwrap();
 
     let mut env = GlobalEnv::new();
     add_modules_to_model(&mut env, topo_order);

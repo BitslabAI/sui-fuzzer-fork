@@ -118,6 +118,7 @@ impl SuiRunner {
                 args,
                 Some(gas_object.id()),
                 50000000,
+                None,
             ))
             .unwrap();
 
@@ -303,5 +304,6 @@ fn move_value_to_json(move_value: &MoveValue) -> JsonValue {
         MoveValue::U32(v) => json!(v),
         MoveValue::U256(v) => json!(v.to_string()),
         MoveValue::Struct(_) => todo!(),
+        MoveValue::Variant(_) => todo!(),
     }
 }

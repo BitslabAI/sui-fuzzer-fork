@@ -1,8 +1,8 @@
 {
-  "use_ui": true,
-  "nb_threads": 2,
+  "use_ui": false,
+  "nb_threads": 1,
   "seed": 4242,
-  "contract": "./examples/fuzzinglabs_package/build/fuzzinglabs_package/bytecode_modules/fuzzinglabs_module.mv",
+  "contract": "/root/belobog-dataset/offchain-datasets/1b894d8a193b4f96d7fbcf77fb8b151a1f4179b6_20250206_092825/1b894d8a193b4f96d7fbcf77fb8b151a1f4179b6/wrapper",
   "contract_b": "./examples/calculator_package",
   "contract_a": "./examples/hero/build/hero/bytecode_modules/example.mv",
   "execs_before_cov_update": 10000,
