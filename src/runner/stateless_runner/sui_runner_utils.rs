@@ -210,7 +210,7 @@ pub fn generate_abi_from_source_starts_with(
             .get_functions()
             .filter(|f| f.get_name_str().starts_with(function_name));
         for f in funcs {
-            let params = f.get_parameters().iter().map(|p| p.1.clone()).collect();
+            let params = f.get_parameter_types();
             functions.push((f.get_name_str(), params));
         }
     } else {

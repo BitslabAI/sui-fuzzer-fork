@@ -102,7 +102,7 @@ module sui::package {
         }
     }
 
-    #[allow(lint(self_transfer))]
+    #[lint_allow(self_transfer)]
     /// Claim a Publisher object and send it to transaction sender.
     /// Since this function can only be called in the module initializer,
     /// the sender is the publisher.

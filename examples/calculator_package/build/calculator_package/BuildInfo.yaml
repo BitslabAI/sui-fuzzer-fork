@@ -5,14 +5,15 @@ compiled_package_info:
     calculator_package: "0000000000000000000000000000000000000000000000000000000000000000"
     std: "0000000000000000000000000000000000000000000000000000000000000001"
     sui: "0000000000000000000000000000000000000000000000000000000000000002"
-  source_digest: 30D4513EDC635B9E08942A7BAA26686CBE607F004C2A2EA3B985893DF4846E3F
+  source_digest: EC3F424ED060F87FE524BF38BAE4162C818699CFA25EC6F11F425806CA2953F7
   build_flags:
     dev_mode: false
     test_mode: false
     generate_docs: false
+    save_disassembly: false
     install_dir: ~
     force_recompilation: false
-    lock_file: "./Move.lock"
+    lock_file: /root/sui-fuzzer-fork/examples/calculator_package/Move.lock
     fetch_deps_only: false
     skip_fetch_latest_git_deps: false
     default_flavor: sui
@@ -20,8 +21,54 @@ compiled_package_info:
     deps_as_root: false
     silence_warnings: false
     warnings_are_errors: false
+    json_errors: false
     additional_named_addresses: {}
-    no_lint: false
+    lint_flag:
+      no_lint: false
+      lint: false
+    modes: []
+    implicit_dependencies:
+      Bridge:
+        Internal:
+          kind:
+            Git:
+              git_url: "https://github.com/MystenLabs/sui.git"
+              git_rev: 61dcfdbe2ddc7ad05d27fc10cd09d4c6cc151acd
+              subdir: crates/sui-framework/packages/bridge
+          subst: ~
+          digest: ~
+          dep_override: true
+      MoveStdlib:
+        Internal:
+          kind:
+            Git:
+              git_url: "https://github.com/MystenLabs/sui.git"
+              git_rev: 61dcfdbe2ddc7ad05d27fc10cd09d4c6cc151acd
+              subdir: crates/sui-framework/packages/move-stdlib
+          subst: ~
+          digest: ~
+          dep_override: true
+      Sui:
+        Internal:
+          kind:
+            Git:
+              git_url: "https://github.com/MystenLabs/sui.git"
+              git_rev: 61dcfdbe2ddc7ad05d27fc10cd09d4c6cc151acd
+              subdir: crates/sui-framework/packages/sui-framework
+          subst: ~
+          digest: ~
+          dep_override: true
+      SuiSystem:
+        Internal:
+          kind:
+            Git:
+              git_url: "https://github.com/MystenLabs/sui.git"
+              git_rev: 61dcfdbe2ddc7ad05d27fc10cd09d4c6cc151acd
+              subdir: crates/sui-framework/packages/sui-system
+          subst: ~
+          digest: ~
+          dep_override: true
+    force_lock_file: false
 dependencies:
   - MoveStdlib
   - Sui

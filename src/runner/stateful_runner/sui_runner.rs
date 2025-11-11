@@ -5,7 +5,8 @@ use rand::seq::SliceRandom;
 use serde_json::{json, Value as JsonValue};
 use sui_core::test_utils::send_and_confirm_transaction;
 use sui_json_rpc::transaction_builder_api::AuthorityStateDataReader;
-use sui_sdk::json::SuiJsonValue;
+use sui_transaction_builder::DataReader;
+use sui_sdk::{json::SuiJsonValue, rpc_types::{SuiObjectDataOptions, SuiRawData}};
 use sui_transaction_builder::TransactionBuilder;
 use sui_types::{
     base_types::{ObjectID, SuiAddress},
@@ -42,7 +43,7 @@ pub struct SuiRunner {
 }
 
 impl SuiRunner {
-    pub fn new(target_module: &str, modules: Vec<Vec<u8>>) -> Self {
+    pub fn new(deps: Vec<ObjectID>, target_module: &str, modules: Vec<Vec<u8>>) -> Self {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -60,7 +61,7 @@ impl SuiRunner {
             modules,
         };
 
-        s.setup();
+        s.setup(deps);
         s
     }
 
@@ -144,6 +145,14 @@ impl Runner for SuiRunner {
         inputs.pop();
 
         for i in &generate_inputs(inputs) {
+            if matches!(i, MoveValue::Address(_)) && self.obj_ids.is_empty() {
+                return Err((
+                    None,
+                    Error::Unknown {
+                        message: "No object ids available for Address parameter".to_string(),
+                    },
+                ));
+            }
             args.push(match i {
                 MoveValue::Address(_) => SuiJsonValue::from_object_id(
                     self.obj_ids
@@ -250,27 +259,34 @@ impl Runner for SuiRunner {
 }
 
 impl StatefulRunner for SuiRunner {
-    fn setup(&mut self) {
+    fn setup(&mut self, deps: Vec<ObjectID>) {
         self.obj_ids.clear();
 
         let mut executor = Executor::new();
         let mut account = AccountCurrent::new(AccountData::new_random());
-        let effects = Self::publish(
-            vec![
-                MOVE_STDLIB_PACKAGE_ID,
-                SUI_FRAMEWORK_PACKAGE_ID,
-                SUI_SYSTEM_PACKAGE_ID,
-            ],
-            &mut account,
-            self.modules.clone(),
-            &mut executor,
-        );
-        let ((package_id, _, _), _) = effects
+        let effects = Self::publish(deps, &mut account, self.modules.clone(), &mut executor);
+        let reader = Arc::new(AuthorityStateDataReader::new(executor.state.clone()));
+        let package_id = effects
             .created()
             .into_iter()
-            .find(|(_, owner)| matches!(owner, Owner::Immutable))
-            .unwrap();
-        let reader = Arc::new(AuthorityStateDataReader::new(executor.state.clone()));
+            .filter_map(|((obj_id, _, _), owner)| {
+                if !matches!(owner, Owner::Immutable) {
+                    return None;
+                }
+                executor
+                    .rt
+                    .block_on(reader.get_object_with_options(
+                        obj_id,
+                        SuiObjectDataOptions::bcs_lossless(),
+                    ))
+                    .ok()?
+                    .into_object()
+                    .ok()
+                    .and_then(|object| match object.bcs {
+                        Some(SuiRawData::Package(_)) => Some(obj_id),
+                        _ => None,
+                    })
+            }).next().unwrap();
         self.executor = Some(executor);
         self.reader = Some(reader);
         self.account = Some(account);

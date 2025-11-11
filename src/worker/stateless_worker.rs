@@ -1,4 +1,5 @@
 use bichannel::Channel;
+use sui_types::base_types::ObjectID;
 use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
@@ -108,7 +109,7 @@ impl StatelessWorker {
 }
 
 impl Worker for StatelessWorker {
-    fn run(&mut self) {
+    fn run(&mut self, deps: Vec<ObjectID>) {
         // Utils for execs per sec
         let mut execs_per_sec_timer = Instant::now();
         let mut sec_elapsed = 0;

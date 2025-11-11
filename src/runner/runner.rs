@@ -1,3 +1,5 @@
+use sui_types::base_types::ObjectID;
+
 use crate::fuzzer::coverage::Coverage;
 use crate::fuzzer::error::Error;
 use crate::mutator::types::Type;
@@ -19,5 +21,5 @@ pub trait Runner {
 }
 
 pub trait StatefulRunner: Runner {
-    fn setup(&mut self);
+    fn setup(&mut self, deps: Vec<ObjectID>);
 }

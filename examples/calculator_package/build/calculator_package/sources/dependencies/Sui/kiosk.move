@@ -232,7 +232,7 @@ module sui::kiosk {
 
     // === Kiosk packing and unpacking ===
 
-    #[allow(lint(self_transfer, share_owned))]
+    #[lint_allow(self_transfer, share_owned)]
     /// Creates a new Kiosk in a default configuration: sender receives the
     /// `KioskOwnerCap` and becomes the Owner, the `Kiosk` is shared.
     entry fun default(ctx: &mut TxContext) {

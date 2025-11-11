@@ -32,6 +32,7 @@ move-binary-format = { path = "./sui/external-crates/move/crates/move-binary-for
 move-bytecode-utils = { path = "./sui/external-crates/move/crates/move-bytecode-utils" }
 move-model = { path = "./sui/external-crates/move/crates/move-model" }
 move-core-types = { path = "./sui/external-crates/move/crates/move-core-types" }
+move-compiler = {path = "./sui/external-crates/move/crates/move-compiler"}
 shared-crypto = { path = "./sui/crates/shared-crypto" }
 sui-keys = { path = "./sui/crates/sui-keys" }
 sui-types = { path = "./sui/crates/sui-types" }
@@ -41,6 +42,7 @@ sui-json-rpc = { path = "./sui/crates/sui-json-rpc" }
 transaction-fuzzer = { path = "./sui/crates/transaction-fuzzer" }
 sui-core = { path = "./sui/crates/sui-core" }
 sui-transaction-builder = { path = "./sui/crates/sui-transaction-builder" }
+sui-package-management = {path = "./sui/crates/sui-package-management"}
 futures = "0.3.30"
 tokio = { version = "1.2", features = ["full"] }
 tokio-core = "0.1.18"

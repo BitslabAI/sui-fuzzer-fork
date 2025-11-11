@@ -7,6 +7,7 @@ use std::{
 use bichannel::Channel;
 use move_model::ty::Type;
 use rand::{seq::SliceRandom, thread_rng};
+use sui_types::base_types::ObjectID;
 
 use crate::{
     detector::detector::AvailableDetector,
@@ -124,7 +125,7 @@ impl StatefulWorker {
 }
 
 impl Worker for StatefulWorker {
-    fn run(&mut self) {
+    fn run(&mut self, deps: Vec<ObjectID>) {
         // Utils for execs per sec
         let mut execs_per_sec_timer = Instant::now();
         let mut sec_elapsed = 0;
@@ -192,7 +193,7 @@ impl Worker for StatefulWorker {
             }
 
             // Reset state
-            self.runner.setup();
+            self.runner.setup(deps.clone());
         }
     }
 }

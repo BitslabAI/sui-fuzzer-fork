@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 
+use sui_types::base_types::ObjectID;
+
 use crate::{
     detector::detector::AvailableDetector,
     fuzzer::{coverage::Coverage, crash::Crash, error::Error},
@@ -16,5 +18,5 @@ pub enum WorkerEvent {
 }
 
 pub trait Worker{
-    fn run(&mut self);
+    fn run(&mut self, deps: Vec<ObjectID>);
 }

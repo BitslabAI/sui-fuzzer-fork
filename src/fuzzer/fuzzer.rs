@@ -1,7 +1,14 @@
 use bichannel::Channel;
+use move_compiler::editions::Flavor;
+use move_package::source_package::layout::SourcePackageLayout;
+use sui_move_build::implicit_deps;
 use sui_move_build::BuildConfig;
+use sui_package_management::system_package_versions::latest_system_packages;
+use sui_types::base_types::ObjectID;
+use sui_types::digests::get_mainnet_chain_identifier;
 use std::collections::HashSet;
 use std::collections::VecDeque;
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -162,36 +169,70 @@ impl Fuzzer {
                                 execs_before_cov_update,
                                 detectors,
                             ));
-                        w.run();
+                        w.run(vec![]);
                     });
             }
         }
     }
 
-    fn build_test_modules(test_dir: &str) -> (Vec<u8>, Vec<Vec<u8>>) {
+    fn build_test_modules(test_dir: &str) -> (Vec<ObjectID>, Vec<Vec<u8>>) {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.extend([test_dir]);
-        let with_unpublished_deps = false;
-        let config = BuildConfig::new_for_testing();
-        let package = config.build(&path).unwrap();
-        (
-            package.get_package_digest(with_unpublished_deps).to_vec(),
-            package.get_package_bytes(with_unpublished_deps),
-        )
+
+        let mut cfg = move_package::BuildConfig::default();
+        cfg.implicit_dependencies = implicit_deps(latest_system_packages());
+        cfg.default_flavor = Some(Flavor::Sui);
+        cfg.lock_file = Some(path.join(SourcePackageLayout::Lock.path()));
+
+        let cfg = BuildConfig {
+            config: cfg,
+            run_bytecode_verifier: false,
+            print_diags_to_stderr: false,
+            chain_id: Some(get_mainnet_chain_identifier().to_string()),
+        };
+
+        let artifacts = cfg.build(&path).unwrap();
+        let mut modules = artifacts.get_dependency_sorted_modules(true);
+        let dep_ids = artifacts.get_dependency_storage_package_ids();
+        if modules.is_empty() {
+            modules = artifacts.get_dependency_sorted_modules(false);
+            for it in modules.iter_mut() {
+                let self_handle = it.self_handle().clone();
+                let self_address_idx = self_handle.address;
+                if let Some(address_mut) =
+                    it.address_identifiers.get_mut(self_address_idx.0 as usize)
+                {
+                    // if *address_mut != AccountAddress::ZERO {
+                    //     warn!("Overwriting {} to {}", address_mut, AccountAddress::ZERO);
+                    //     *address_mut = AccountAddress::ZERO;
+                    // }
+                }
+            }
+        }
+
+        let mut bufs = vec![];
+        for module in modules.into_iter() {
+            let mut buf = vec![];
+            module.serialize_with_version(module.version, &mut buf).unwrap();
+            bufs.push(buf);
+        }
+        (dep_ids, bufs)
     }
 
     fn start_stateful_threads(&mut self) {
 
-        let (_, modules) = Self::build_test_modules(self.config.contract.as_ref().unwrap());
+        let (deps, modules) = Self::build_test_modules(self.config.contract.as_ref().unwrap());
 
         for i in 0..self.config.nb_threads {
             // Creates the communication channel for the fuzzer and worker sides
+            let value = deps.clone();
             let (fuzzer, worker) = bichannel::channel::<WorkerEvent, WorkerEvent>();
             self.channels.push(fuzzer);
             let stats = Arc::new(RwLock::new(Stats::new()));
             self.threads_stats.push(stats.clone());
             // Change here the runner you want to create
             let runner = Box::new(StatefulSuiRunner::new(
+                    deps.clone(),
                     &self.target_module,
                     modules.clone(),
                 ));
@@ -226,7 +267,7 @@ impl Fuzzer {
                             fuzz_prefix,
                             max_call_sequence_size
                         ));
-                    w.run();
+                    w.run(value.clone());
                 });
             }
     }
